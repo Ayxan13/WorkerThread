@@ -17,42 +17,24 @@ public:
     using Task = std::function<void(void)>;
 
 private:
-    /* this mutex must be locked before
-     * modifying state of this class */
-    std::mutex _mutex;
-
-    /* list of tasks to be executed */
-    std::queue<Task> _toDo;
-
-    /* The thread waits for this signal when
-     * there are no tasks to be executed.
-     * `notify_one` should be called to
-     * wake up the thread and have it go
-     * through the tasks. */
-    std::condition_variable _signal;
-
-    /* This flag is checked by the thread
-     * before going to sleep. If it's set,
-     * thread exits the event loop and terminates. */
-    bool _stop = false;
-
-    /* the thread is constructed at the
-     * end so everything is ready by
-     * the time it executes. */
-    std::thread _thread;
+    std::mutex mutex_;
+    std::queue<Task> toDo_;
+    std::condition_variable signal_;
+    bool stop_ = false;
+    std::thread thread_;
 
 private:
     void ThreadMain() noexcept {
         for (Task task;;) {
             {
-                std::unique_lock lock{ _mutex };
-                _signal.wait(lock, [this] { return (_stop || !_toDo.empty()); });
+                std::unique_lock lock{ mutex_ };
+                signal_.wait(lock, [this] { return (stop_ || !toDo_.empty()); });
 
-                if (_stop && _toDo.empty())
+                if (stop_ && toDo_.empty())
                     break;
 
-                task = std::move(_toDo.front());
-                _toDo.pop();
+                task = std::move(toDo_.front());
+                toDo_.pop();
             }
 
 
@@ -71,24 +53,24 @@ public:
     template <class Func>
     void Schedule(Func&& func) {
         {
-            std::scoped_lock lock{ _mutex };
+            std::scoped_lock lock{ mutex_ };
 
-            _toDo.push(std::forward<Func>(func));
+            toDo_.push(std::forward<Func>(func));
         }
 
-        _signal.notify_one();
+        signal_.notify_one();
     }
 
-    WorkerThread() : _thread(&WorkerThread::ThreadMain, this) {}
+    WorkerThread() : thread_(&WorkerThread::ThreadMain, this) {}
 
     ~WorkerThread() {
         {
-            std::scoped_lock lock{ _mutex };
-            _stop = true;
+            std::scoped_lock lock{ mutex_ };
+            stop_ = true;
         }
 
-        _signal.notify_one();
-        _thread.join();
+        signal_.notify_one();
+        thread_.join();
     }
 
     WorkerThread(WorkerThread const&) = delete;
