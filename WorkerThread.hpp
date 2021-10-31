@@ -1,6 +1,5 @@
 #pragma once
 
-
 //
 // Created by Ayxan Haqverdili on 2021-05-04
 //
@@ -8,11 +7,12 @@
 #include <condition_variable>
 #include <functional>
 #include <mutex>
-#include <queue>
 #include <thread>
 #include <utility>
+#include <queue>
 
-class WorkerThread final {
+class WorkerThread final
+{
 public:
     using Task = std::function<void(void)>;
 
@@ -24,7 +24,8 @@ private:
     std::thread thread_;
 
 private:
-    void ThreadMain() noexcept {
+    void ThreadMain() noexcept
+    {
         for (Task task;;) {
             {
                 std::unique_lock lock{ mutex_ };
@@ -36,7 +37,6 @@ private:
                 task = std::move(toDo_.front());
                 toDo_.pop();
             }
-
 
             try {
                 task();
@@ -50,12 +50,13 @@ private:
     }
 
 public:
-    template <class Func>
-    void Schedule(Func&& func) {
+    template<class... Func>
+    void Schedule(Func&&... func)
+    {
         {
             std::scoped_lock lock{ mutex_ };
 
-            toDo_.push(std::forward<Func>(func));
+            (toDo_.push(std::forward<Func>(func)), ...);
         }
 
         signal_.notify_one();
@@ -63,7 +64,8 @@ public:
 
     WorkerThread() : thread_(&WorkerThread::ThreadMain, this) {}
 
-    ~WorkerThread() {
+    ~WorkerThread()
+    {
         {
             std::scoped_lock lock{ mutex_ };
             stop_ = true;
